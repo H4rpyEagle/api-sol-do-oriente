@@ -30,10 +30,12 @@ router.post('/messages', async (req, res) => {
     // Processa a mensagem de forma assíncrona
     processMessage({ body: req.body })
       .then(result => {
-        logger.success('Mensagem processada com sucesso');
+        logger.success('Mensagem processada com sucesso:', result);
       })
       .catch(error => {
         logger.error('Erro ao processar mensagem:', error);
+        logger.error('Stack trace:', error.stack);
+        logger.error('Body recebido:', JSON.stringify(req.body, null, 2));
       });
   } catch (error) {
     logger.error('Erro no webhook:', error);

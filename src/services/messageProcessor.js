@@ -55,27 +55,40 @@ async function getMediaBase64(serverUrl, instance, apikey, messageId) {
  * Processa uma mensagem de texto
  */
 async function processTextMessage(webhookData) {
-  const { body } = webhookData;
-  const key = body.data?.key || {};
-  const telefone = extractPhoneNumber(key);
-  const instancia = body.instance;
-  const mensagem = body.data?.message?.conversation || '';
+  try {
+    const { body } = webhookData;
+    const key = body.data?.key || {};
+    const telefone = extractPhoneNumber(key);
+    const instancia = body.instance;
+    const mensagem = body.data?.message?.conversation || '';
 
-  if (!telefone) {
-    logger.warn('Não foi possível extrair o número de telefone');
-    return;
+    logger.info(`Extraindo dados - Telefone: ${telefone}, Instância: ${instancia}, Mensagem: ${mensagem.substring(0, 50)}...`);
+
+    if (!telefone) {
+      logger.warn('Não foi possível extrair o número de telefone');
+      logger.warn('Key recebido:', JSON.stringify(key, null, 2));
+      throw new Error('Telefone não encontrado no webhook');
+    }
+
+    if (!instancia) {
+      logger.warn('Instância não encontrada no webhook');
+    }
+
+    const messageData = {
+      telefone,
+      instancia: instancia || 'desconhecida',
+      remetente: body.data?.key?.fromMe ? 'Agente' : 'Cliente',
+      mensagem: mensagem || '',
+      criado_em: getCurrentTimestamp(),
+    };
+
+    logger.info('Salvando mensagem no Supabase:', messageData);
+    const saved = await saveMessage(messageData);
+    logger.success(`Mensagem de texto salva com sucesso! ID: ${saved.id}, Telefone: ${telefone}`);
+  } catch (error) {
+    logger.error('Erro ao processar mensagem de texto:', error);
+    throw error;
   }
-
-  const messageData = {
-    telefone,
-    instancia,
-    remetente: body.data?.key?.fromMe ? 'Agente' : 'Cliente',
-    mensagem,
-    criado_em: getCurrentTimestamp(),
-  };
-
-  await saveMessage(messageData);
-  logger.success(`Mensagem de texto processada: ${telefone}`);
 }
 
 /**
@@ -186,39 +199,54 @@ export async function processMessage(webhookData) {
     const messageType = body.data?.messageType;
 
     logger.info(`Processando evento: ${event}, tipo: ${messageType}`);
+    logger.debug('Body completo:', JSON.stringify(body, null, 2));
 
     // Só processa eventos de mensagens
     if (event !== 'messages.upsert' && event !== 'send.message') {
-      logger.debug(`Evento ignorado: ${event}`);
+      logger.warn(`Evento ignorado: ${event}`);
       return { processed: false, reason: 'Evento não suportado' };
     }
 
     // Processa baseado no tipo de mensagem
+    let result;
     switch (messageType) {
       case 'conversation':
+        logger.info('Processando mensagem de texto...');
         await processTextMessage(webhookData);
+        result = { processed: true, type: 'text' };
         break;
 
       case 'imageMessage':
+        logger.info('Processando mensagem de imagem...');
         await processImageMessage(webhookData);
+        result = { processed: true, type: 'image' };
         break;
 
       case 'audioMessage':
+        logger.info('Processando mensagem de áudio...');
         await processAudioMessage(webhookData);
+        result = { processed: true, type: 'audio' };
         break;
 
       default:
         logger.warn(`Tipo de mensagem não suportado: ${messageType}`);
         // Tenta processar como texto se tiver conversation
         if (body.data?.message?.conversation) {
+          logger.info('Tentando processar como texto (fallback)...');
           await processTextMessage(webhookData);
+          result = { processed: true, type: 'text', fallback: true };
+        } else {
+          result = { processed: false, reason: `Tipo não suportado: ${messageType}` };
         }
         break;
     }
 
-    return { processed: true };
+    logger.success('Mensagem processada:', result);
+    return result;
   } catch (error) {
     logger.error('Erro ao processar mensagem:', error);
+    logger.error('Stack trace:', error.stack);
+    logger.error('Webhook data:', JSON.stringify(webhookData, null, 2));
     throw error;
   }
 }
