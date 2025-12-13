@@ -1,0 +1,30 @@
+{
+  "name": "api-sol-do-oriente",
+  "version": "1.0.0",
+  "description": "API para processamento de mensagens do Sol do Oriente",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "api",
+    "whatsapp",
+    "messages",
+    "supabase",
+    "minio"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.84.0",
+    "@aws-sdk/client-s3": "^3.654.0",
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.0"
+  }
+}
+
