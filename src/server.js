@@ -56,22 +56,27 @@ app.use((req, res) => {
   });
 });
 
-// Inicia servidor
-const server = app.listen(config.server.port, () => {
-  logger.success(`🚀 API Sol do Oriente rodando na porta ${config.server.port}`);
-  logger.info(`📡 Health check: http://localhost:${config.server.port}/health`);
-  logger.info(`📨 Webhook: http://localhost:${config.server.port}/webhook/messages`);
-});
+// Exporta para Vercel (serverless)
+export default app;
 
-// Graceful shutdown
-const shutdown = (signal) => {
-  logger.info(`👋 ${signal} recebido. Fechando servidor...`);
-  server.close(() => {
-    logger.success('✅ Servidor fechado.');
-    process.exit(0);
+// Inicia servidor apenas se não estiver no Vercel
+if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
+  const server = app.listen(config.server.port, () => {
+    logger.success(`🚀 API Sol do Oriente rodando na porta ${config.server.port}`);
+    logger.info(`📡 Health check: http://localhost:${config.server.port}/health`);
+    logger.info(`📨 Webhook: http://localhost:${config.server.port}/webhook/messages`);
   });
-};
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+  // Graceful shutdown
+  const shutdown = (signal) => {
+    logger.info(`👋 ${signal} recebido. Fechando servidor...`);
+    server.close(() => {
+      logger.success('✅ Servidor fechado.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
 

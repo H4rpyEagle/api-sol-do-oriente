@@ -38,7 +38,15 @@ const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
   console.error('❌ Variáveis de ambiente faltando:', missingVars.join(', '));
-  console.error('Por favor, configure o arquivo .env');
-  process.exit(1);
+  
+  // No Vercel, apenas loga o erro mas não encerra o processo
+  // As variáveis podem ser configuradas depois e o deploy será refeito
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    console.error('⚠️ Configure as variáveis de ambiente no dashboard do Vercel');
+    console.error('📖 Veja o arquivo CONFIGURAR_VERCEL.md para instruções');
+  } else {
+    console.error('Por favor, configure o arquivo .env');
+    process.exit(1);
+  }
 }
 
