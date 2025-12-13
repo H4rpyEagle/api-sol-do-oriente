@@ -9,21 +9,40 @@ const supabase = createClient(
 
 /**
  * Salva uma mensagem na tabela Mensagens
+ * Remove campos que não existem na tabela (como imagem_url se não existir)
  */
 export async function saveMessage(messageData) {
   try {
+    // Campos permitidos na tabela Mensagens (baseado no schema)
+    const allowedFields = ['telefone', 'instancia', 'remetente', 'mensagem', 'criado_em'];
+    
+    // Filtra apenas os campos que existem na tabela
+    const filteredData = {};
+    for (const field of allowedFields) {
+      if (messageData[field] !== undefined) {
+        filteredData[field] = messageData[field];
+      }
+    }
+
+    logger.info('Dados filtrados para inserção:', filteredData);
+
     const { data, error } = await supabase
       .from('Mensagens')
-      .insert([messageData])
+      .insert([filteredData])
       .select()
       .single();
 
     if (error) {
       logger.error('Erro ao salvar mensagem no Supabase:', error);
+      logger.error('Código do erro:', error.code);
+      logger.error('Mensagem do erro:', error.message);
+      logger.error('Detalhes:', error.details);
+      logger.error('Hint:', error.hint);
       throw error;
     }
 
-    logger.success('Mensagem salva com sucesso:', data.id);
+    logger.success('Mensagem salva com sucesso! ID:', data.id);
+    logger.debug('Dados salvos:', data);
     return data;
   } catch (error) {
     logger.error('Erro ao salvar mensagem:', error);

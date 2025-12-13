@@ -124,12 +124,13 @@ async function processImageMessage(webhookData) {
     const imageUrl = await uploadImageToMinIO(base64Image, telefone);
 
     // Salva mensagem no Supabase
+    // Nota: imagem_url não está na tabela, então não incluímos
+    // Se precisar salvar a URL da imagem, adicione a coluna na tabela primeiro
     const messageData = {
       telefone,
       instancia,
       remetente: body.data?.key?.fromMe ? 'Agente' : 'Cliente',
-      mensagem: caption,
-      imagem_url: imageUrl,
+      mensagem: caption || `Imagem enviada: ${imageUrl}`, // Inclui URL da imagem na mensagem
       criado_em: getCurrentTimestamp(),
     };
 
