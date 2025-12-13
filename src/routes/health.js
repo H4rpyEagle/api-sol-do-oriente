@@ -2,6 +2,7 @@ import express from 'express';
 import { checkConnection as checkSupabase } from '../services/supabaseService.js';
 import { checkMinIOConnection } from '../services/imageUploader.js';
 import { logger } from '../utils/logger.js';
+import { logRequest } from '../utils/requestLogger.js';
 
 const router = express.Router();
 
@@ -31,19 +32,25 @@ router.get('/', async (req, res) => {
       health.services.minio?.connected;
 
     if (!allServicesOk) {
-      return res.status(503).json({
+      const degradedResponse = {
         ...health,
         status: 'degraded',
-      });
+      };
+      res.status(503).json(degradedResponse);
+      logRequest(req, degradedResponse);
+      return;
     }
 
     res.json(health);
+    logRequest(req, health);
   } catch (error) {
     logger.error('Erro no health check:', error);
-    res.status(500).json({
+    const errorResponse = {
       status: 'error',
       error: error.message,
-    });
+    };
+    res.status(500).json(errorResponse);
+    logRequest(req, errorResponse);
   }
 });
 

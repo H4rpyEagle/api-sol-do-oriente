@@ -3,6 +3,8 @@ import { config } from './config/env.js';
 import { logger } from './utils/logger.js';
 import webhookRoutes from './routes/webhooks.js';
 import healthRoutes from './routes/health.js';
+import requestsRoutes from './routes/requests.js';
+import { logRequest } from './utils/requestLogger.js';
 
 const app = express();
 
@@ -23,21 +25,54 @@ app.use((req, res, next) => {
   next();
 });
 
+// Middleware para logar requisições (exceto /requests para evitar loop)
+app.use((req, res, next) => {
+  // Não loga requisições para /requests para evitar loop infinito
+  if (!req.path.startsWith('/requests')) {
+    // Loga após a resposta ser enviada
+    const originalJson = res.json;
+    const originalSend = res.send;
+    
+    res.json = function(data) {
+      logRequest(req, {
+        status: res.statusCode,
+        body: typeof data === 'string' ? data : JSON.stringify(data),
+      });
+      return originalJson.call(this, data);
+    };
+    
+    res.send = function(data) {
+      if (res.headersSent) return originalSend.call(this, data);
+      logRequest(req, {
+        status: res.statusCode,
+        body: typeof data === 'string' ? data : JSON.stringify(data),
+      });
+      return originalSend.call(this, data);
+    };
+  }
+  next();
+});
+
 // Rotas
 app.use('/webhook', webhookRoutes);
 app.use('/health', healthRoutes);
+app.use('/requests', requestsRoutes);
 
 // Rota raiz
 app.get('/', (req, res) => {
-  res.json({
+  const response = {
     name: 'API Sol do Oriente',
     version: '1.0.0',
     status: 'running',
     endpoints: {
       webhook: '/webhook/messages',
       health: '/health',
+      requests: '/requests',
+      requestsStats: '/requests/stats',
     },
-  });
+  };
+  res.json(response);
+  logRequest(req, response);
 });
 
 // Error handler

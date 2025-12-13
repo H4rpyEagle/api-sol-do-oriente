@@ -1,6 +1,7 @@
 import express from 'express';
 import { processMessage } from '../services/messageProcessor.js';
 import { logger } from '../utils/logger.js';
+import { logRequest } from '../utils/requestLogger.js';
 
 const router = express.Router();
 
@@ -15,6 +16,17 @@ router.post('/messages', async (req, res) => {
       messageType: req.body?.data?.messageType,
     });
 
+    // Responde imediatamente para não fazer a Evolution API esperar
+    const response = {
+      success: true,
+      message: 'Webhook recebido e em processamento',
+    };
+
+    res.status(200).json(response);
+
+    // Registra a requisição após responder
+    logRequest(req, response);
+
     // Processa a mensagem de forma assíncrona
     processMessage({ body: req.body })
       .then(result => {
@@ -23,18 +35,14 @@ router.post('/messages', async (req, res) => {
       .catch(error => {
         logger.error('Erro ao processar mensagem:', error);
       });
-
-    // Responde imediatamente para não fazer a Evolution API esperar
-    res.status(200).json({
-      success: true,
-      message: 'Webhook recebido e em processamento',
-    });
   } catch (error) {
     logger.error('Erro no webhook:', error);
-    res.status(500).json({
+    const errorResponse = {
       success: false,
       error: 'Erro ao processar webhook',
-    });
+    };
+    res.status(500).json(errorResponse);
+    logRequest(req, errorResponse);
   }
 });
 
