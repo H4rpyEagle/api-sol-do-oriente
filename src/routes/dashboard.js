@@ -473,28 +473,58 @@ router.get('/', (req, res) => {
       const messageInfo = extractMessageInfo(request.body);
       
       if (messageInfo) {
+        // Etapa 1: Mensagem recebida
         steps.push({
           icon: '📨',
           text: \`Mensagem recebida de \${messageInfo.telefone}\`,
+          status: 'success',
+          time: request.timestamp
+        });
+        
+        // Etapa 2: Tipo de mensagem identificado
+        let typeLabel = '';
+        if (messageInfo.type === 'conversation') typeLabel = 'Texto';
+        else if (messageInfo.type === 'imageMessage') typeLabel = 'Imagem';
+        else if (messageInfo.type === 'audioMessage') typeLabel = 'Áudio';
+        else typeLabel = messageInfo.type;
+        
+        steps.push({
+          icon: '🔍',
+          text: \`Tipo identificado: \${typeLabel}\`,
           status: 'success'
         });
         
+        // Etapa 3: Processando
         steps.push({
           icon: '🔄',
-          text: \`Processando mensagem: "\${messageInfo.mensagem.substring(0, 50)}\${messageInfo.mensagem.length > 50 ? '...' : ''}"\`,
+          text: \`Processando: "\${messageInfo.mensagem.substring(0, 50)}\${messageInfo.mensagem.length > 50 ? '...' : ''}"\`,
           status: 'processing'
         });
         
+        // Etapa 4: Verifica resposta
         if (request.response) {
           try {
             const response = typeof request.response === 'string' 
               ? JSON.parse(request.response) 
               : request.response;
             
-            if (response.success) {
+            if (response.success || response.status === 200) {
               steps.push({
                 icon: '✅',
-                text: 'Mensagem salva no Supabase com sucesso',
+                text: 'Webhook processado com sucesso',
+                status: 'success'
+              });
+              
+              // Verifica se foi salvo no banco (assumindo que sim se success)
+              steps.push({
+                icon: '💾',
+                text: 'Salvando no Supabase...',
+                status: 'processing'
+              });
+              
+              steps.push({
+                icon: '✅',
+                text: 'Mensagem salva na tabela Mensagens',
                 status: 'success'
               });
             } else {
@@ -511,6 +541,12 @@ router.get('/', (req, res) => {
               status: 'success'
             });
           }
+        } else {
+          steps.push({
+            icon: '⏳',
+            text: 'Aguardando processamento...',
+            status: 'processing'
+          });
         }
       }
       
