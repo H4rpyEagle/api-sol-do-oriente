@@ -86,10 +86,7 @@ app.use((err, req, res, next) => {
 
 // Rota catch-all para webhooks (antes do 404)
 // Algumas configurações podem enviar para /webhook diretamente
-app.post('/webhook', async (req, res) => {
-  const webhookRoutes = await import('./routes/webhooks.js');
-  webhookRoutes.default(req, res, () => {});
-});
+// Isso já é coberto pelo router.use('/webhook', webhookRoutes) acima
 
 // 404 handler
 app.use((req, res) => {
