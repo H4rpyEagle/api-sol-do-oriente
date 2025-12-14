@@ -83,10 +83,20 @@ async function processTextMessage(webhookData) {
     };
 
     logger.info('Salvando mensagem no Supabase:', messageData);
-    const saved = await saveMessage(messageData);
-    logger.success(`Mensagem de texto salva com sucesso! ID: ${saved.id}, Telefone: ${telefone}`);
+    
+    try {
+      const saved = await saveMessage(messageData);
+      logger.success(`✅ Mensagem de texto salva com sucesso! ID: ${saved.id}, Telefone: ${telefone}`);
+      return saved;
+    } catch (saveError) {
+      logger.error('❌ Erro ao salvar mensagem no Supabase:', saveError);
+      logger.error('Dados que tentaram ser salvos:', messageData);
+      // Re-lança o erro para que seja tratado acima
+      throw saveError;
+    }
   } catch (error) {
     logger.error('Erro ao processar mensagem de texto:', error);
+    logger.error('Stack:', error.stack);
     throw error;
   }
 }

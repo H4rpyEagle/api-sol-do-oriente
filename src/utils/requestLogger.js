@@ -64,16 +64,21 @@ async function saveLogToSupabase(requestLog, responseData) {
     }
     
     // Prepara dados para inserção
+    // Tenta usar criado_em primeiro, depois created_at (compatibilidade)
     const logData = {
       tipo: tipo,
       mensagem: mensagem.substring(0, 5000), // Limita tamanho da mensagem
       method: requestLog.method,
       path: path,
       body: requestLog.body ? (typeof requestLog.body === 'string' ? requestLog.body : JSON.stringify(requestLog.body)).substring(0, 10000) : null,
-      response: responseData ? JSON.stringify(responseData) : null,
+      response: responseData ? (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)).substring(0, 10000) : null,
       query_params: requestLog.query && Object.keys(requestLog.query).length > 0 ? requestLog.query : null,
-      created_at: requestLog.timestamp
     };
+    
+    // Adiciona timestamp (tenta ambos os nomes para compatibilidade)
+    const timestamp = new Date(requestLog.timestamp);
+    logData.criado_em = timestamp.toISOString().replace('T', ' ').substring(0, 19);
+    logData.created_at = timestamp.toISOString();
     
     // Remove campos null para não ocupar espaço
     Object.keys(logData).forEach(key => {
@@ -86,13 +91,19 @@ async function saveLogToSupabase(requestLog, responseData) {
     supabase
       .from('logs')
       .insert([logData])
-      .then(({ error }) => {
+      .then(({ data, error }) => {
         if (error) {
-          logger.warn('Erro ao salvar log no Supabase (não crítico):', error.message);
+          logger.error('Erro ao salvar log no Supabase:', error);
+          logger.error('Código:', error.code);
+          logger.error('Mensagem:', error.message);
+          logger.error('Detalhes:', error.details);
+          logger.error('Dados tentados:', logData);
+        } else {
+          logger.debug('Log salvo no Supabase com sucesso:', data?.[0]?.id);
         }
       })
       .catch(err => {
-        logger.warn('Erro ao salvar log no Supabase (não crítico):', err.message);
+        logger.error('Erro ao salvar log no Supabase:', err);
       });
   } catch (error) {
     // Não bloqueia o fluxo se houver erro ao salvar log
