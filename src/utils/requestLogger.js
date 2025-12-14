@@ -65,21 +65,66 @@ async function saveLogToSupabase(requestLog, responseData) {
     }
     
     // Prepara dados para inserção
-    // Tenta usar criado_em primeiro, depois created_at (compatibilidade)
+    // Usa apenas campos básicos que provavelmente existem na tabela
+    // Se a tabela não tiver algumas colunas, elas serão ignoradas
     const logData = {
       tipo: tipo,
       mensagem: mensagem.substring(0, 5000), // Limita tamanho da mensagem
-      method: requestLog.method,
-      path: path,
-      body: requestLog.body ? (typeof requestLog.body === 'string' ? requestLog.body : JSON.stringify(requestLog.body)).substring(0, 10000) : null,
-      response: responseData ? (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)).substring(0, 10000) : null,
-      query_params: requestLog.query && Object.keys(requestLog.query).length > 0 ? requestLog.query : null,
     };
+    
+    // Adiciona campos opcionais apenas se não forem null
+    // Isso evita erros se as colunas não existirem
+    if (requestLog.method) {
+      logData.method = requestLog.method;
+    }
+    if (path) {
+      logData.path = path;
+    }
+    
+    // Tenta adicionar body, mas não falha se a coluna não existir
+    // O erro será tratado no catch abaixo
+    try {
+      if (requestLog.body) {
+        const bodyStr = typeof requestLog.body === 'string' 
+          ? requestLog.body 
+          : JSON.stringify(requestLog.body);
+        if (bodyStr.length > 0) {
+          logData.body = bodyStr.substring(0, 10000);
+        }
+      }
+    } catch (e) {
+      // Ignora se não conseguir processar body
+    }
+    
+    try {
+      if (responseData) {
+        const responseStr = typeof responseData === 'string' 
+          ? responseData 
+          : JSON.stringify(responseData);
+        if (responseStr.length > 0) {
+          logData.response = responseStr.substring(0, 10000);
+        }
+      }
+    } catch (e) {
+      // Ignora se não conseguir processar response
+    }
+    
+    try {
+      if (requestLog.query && Object.keys(requestLog.query).length > 0) {
+        logData.query_params = requestLog.query;
+      }
+    } catch (e) {
+      // Ignora se não conseguir processar query_params
+    }
     
     // Adiciona timestamp (tenta ambos os nomes para compatibilidade)
     const timestamp = new Date(requestLog.timestamp);
-    logData.criado_em = timestamp.toISOString().replace('T', ' ').substring(0, 19);
-    logData.created_at = timestamp.toISOString();
+    try {
+      logData.criado_em = timestamp.toISOString().replace('T', ' ').substring(0, 19);
+    } catch (e) {}
+    try {
+      logData.created_at = timestamp.toISOString();
+    } catch (e) {}
     
     // Remove campos null para não ocupar espaço
     Object.keys(logData).forEach(key => {
@@ -95,20 +140,40 @@ async function saveLogToSupabase(requestLog, responseData) {
       .insert([logData])
       .then(({ data, error }) => {
         if (error) {
-          logger.error('Erro ao salvar log no Supabase:', error);
-          logger.error('Código:', error.code);
-          logger.error('Mensagem:', error.message);
-          logger.error('Detalhes:', error.details);
-          logger.error('Dados tentados:', logData);
-          throw error; // Lança erro para que o .catch() funcione
+          // Se o erro for sobre coluna não encontrada, tenta novamente sem as colunas problemáticas
+          if (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache')) {
+            logger.warn('Coluna não encontrada na tabela logs, tentando sem campos opcionais...');
+            
+            // Remove campos que podem não existir
+            const minimalLogData = {
+              tipo: logData.tipo,
+              mensagem: logData.mensagem,
+            };
+            
+            // Tenta novamente apenas com campos básicos
+            return supabase
+              .from('logs')
+              .insert([minimalLogData])
+              .then(({ data: retryData, error: retryError }) => {
+                if (retryError) {
+                  logger.warn('Erro ao salvar log mesmo com dados mínimos (não crítico):', retryError.message);
+                  return null; // Não lança erro, apenas loga
+                }
+                logger.debug('Log salvo no Supabase (dados mínimos):', retryData?.[0]?.id);
+                return retryData;
+              });
+          }
+          
+          logger.warn('Erro ao salvar log no Supabase (não crítico):', error.message);
+          return null; // Não lança erro para não quebrar o fluxo
         } else {
           logger.debug('Log salvo no Supabase com sucesso:', data?.[0]?.id);
           return data;
         }
       })
       .catch(err => {
-        logger.error('Erro ao salvar log no Supabase:', err);
-        throw err; // Re-lança para que o .catch() funcione
+        logger.warn('Erro ao salvar log no Supabase (não crítico):', err.message);
+        return null; // Não lança erro para não quebrar o fluxo
       });
   } catch (error) {
     // Não bloqueia o fluxo se houver erro ao salvar log
