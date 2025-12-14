@@ -19,6 +19,7 @@ const supabase = createClient(
 
 /**
  * Salva log no Supabase de forma assíncrona (não bloqueia)
+ * Retorna uma Promise
  */
 async function saveLogToSupabase(requestLog, responseData) {
   try {
@@ -88,7 +89,8 @@ async function saveLogToSupabase(requestLog, responseData) {
     });
     
     // Salva no Supabase de forma assíncrona (não bloqueia)
-    supabase
+    // Retorna Promise para que logRequest possa retornar uma Promise
+    return supabase
       .from('logs')
       .insert([logData])
       .then(({ data, error }) => {
@@ -98,12 +100,15 @@ async function saveLogToSupabase(requestLog, responseData) {
           logger.error('Mensagem:', error.message);
           logger.error('Detalhes:', error.details);
           logger.error('Dados tentados:', logData);
+          throw error; // Lança erro para que o .catch() funcione
         } else {
           logger.debug('Log salvo no Supabase com sucesso:', data?.[0]?.id);
+          return data;
         }
       })
       .catch(err => {
         logger.error('Erro ao salvar log no Supabase:', err);
+        throw err; // Re-lança para que o .catch() funcione
       });
   } catch (error) {
     // Não bloqueia o fluxo se houver erro ao salvar log
@@ -113,6 +118,7 @@ async function saveLogToSupabase(requestLog, responseData) {
 
 /**
  * Adiciona uma requisição ao log
+ * Retorna uma Promise para compatibilidade com código que usa .catch()
  */
 export function logRequest(req, responseData = null) {
   const requestLog = {
@@ -139,12 +145,14 @@ export function logRequest(req, responseData = null) {
     requests.pop();
   }
 
-  // Salva no Supabase de forma assíncrona (não bloqueia)
-  saveLogToSupabase(requestLog, responseData).catch(() => {
-    // Erro já foi logado em saveLogToSupabase
-  });
-
-  return requestLog;
+  // Salva no Supabase de forma assíncrona e retorna Promise
+  // Isso permite usar .catch() no código que chama esta função
+  return saveLogToSupabase(requestLog, responseData)
+    .then(() => requestLog)
+    .catch(() => {
+      // Erro já foi logado em saveLogToSupabase
+      return requestLog; // Retorna mesmo em caso de erro
+    });
 }
 
 /**
