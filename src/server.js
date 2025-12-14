@@ -58,7 +58,61 @@ app.use('/webhook', webhookRoutes);
 app.use('/health', healthRoutes);
 app.use('/requests', requestsRoutes);
 
-// Rota raiz
+// Rota POST na raiz para receber webhooks da Evolution API
+// A Evolution API está configurada para enviar para https://mensagem.soldooriente.online/
+app.post('/', async (req, res) => {
+  // Importa e usa o mesmo handler do webhook
+  const { processMessage } = await import('./services/messageProcessor.js');
+  const { logRequest } = await import('./utils/requestLogger.js');
+  
+  try {
+    logger.info('Webhook recebido na raiz:', {
+      event: req.body?.event,
+      messageType: req.body?.data?.messageType,
+    });
+
+    // Verifica se tem dados de mensagem
+    if (!req.body || !req.body.event) {
+      logger.warn('Webhook recebido sem dados válidos:', req.body);
+      return res.status(400).json({
+        success: false,
+        error: 'Dados do webhook inválidos',
+      });
+    }
+
+    // Responde imediatamente para não fazer a Evolution API esperar
+    const response = {
+      success: true,
+      message: 'Webhook recebido e em processamento',
+    };
+
+    res.status(200).json(response);
+
+    // Registra a requisição após responder
+    logRequest(req, response);
+
+    // Processa a mensagem de forma assíncrona
+    processMessage({ body: req.body })
+      .then(result => {
+        logger.success('Mensagem processada com sucesso:', result);
+      })
+      .catch(error => {
+        logger.error('Erro ao processar mensagem:', error);
+        logger.error('Stack trace:', error.stack);
+        logger.error('Body recebido:', JSON.stringify(req.body, null, 2));
+      });
+  } catch (error) {
+    logger.error('Erro no webhook raiz:', error);
+    const errorResponse = {
+      success: false,
+      error: 'Erro ao processar webhook',
+    };
+    res.status(500).json(errorResponse);
+    logRequest(req, errorResponse);
+  }
+});
+
+// Rota GET na raiz
 app.get('/', (req, res) => {
   const response = {
     name: 'API Sol do Oriente',
@@ -66,6 +120,7 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       webhook: '/webhook/messages',
+      webhookRoot: 'POST /',
       health: '/health',
       requests: '/requests',
       requestsStats: '/requests/stats',
