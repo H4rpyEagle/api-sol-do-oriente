@@ -10,11 +10,38 @@ const router = express.Router();
  * Recebe webhooks da Evolution API com mensagens do WhatsApp
  */
 router.post('/messages', async (req, res) => {
+  await handleWebhook(req, res);
+});
+
+/**
+ * POST /webhook (catch-all para qualquer path)
+ * Algumas configurações da Evolution API podem enviar direto para /webhook
+ */
+router.post('*', async (req, res) => {
+  await handleWebhook(req, res);
+});
+
+/**
+ * Função centralizada para processar webhooks
+ */
+async function handleWebhook(req, res) {
   try {
     logger.info('Webhook recebido:', {
+      method: req.method,
+      path: req.path,
+      url: req.url,
       event: req.body?.event,
       messageType: req.body?.data?.messageType,
     });
+
+    // Verifica se tem dados de mensagem
+    if (!req.body || !req.body.event) {
+      logger.warn('Webhook recebido sem dados válidos:', req.body);
+      return res.status(400).json({
+        success: false,
+        error: 'Dados do webhook inválidos',
+      });
+    }
 
     // Responde imediatamente para não fazer a Evolution API esperar
     const response = {
@@ -39,6 +66,8 @@ router.post('/messages', async (req, res) => {
       });
   } catch (error) {
     logger.error('Erro no webhook:', error);
+    logger.error('Path da requisição:', req.path);
+    logger.error('URL completa:', req.url);
     const errorResponse = {
       success: false,
       error: 'Erro ao processar webhook',
@@ -46,7 +75,7 @@ router.post('/messages', async (req, res) => {
     res.status(500).json(errorResponse);
     logRequest(req, errorResponse);
   }
-});
+}
 
 export default router;
 

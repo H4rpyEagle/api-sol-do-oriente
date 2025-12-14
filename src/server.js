@@ -84,10 +84,26 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Rota catch-all para webhooks (antes do 404)
+// Algumas configurações podem enviar para /webhook diretamente
+app.post('/webhook', async (req, res) => {
+  const webhookRoutes = await import('./routes/webhooks.js');
+  webhookRoutes.default(req, res, () => {});
+});
+
 // 404 handler
 app.use((req, res) => {
+  logger.warn(`Rota não encontrada: ${req.method} ${req.path}`);
   res.status(404).json({
     error: 'Rota não encontrada',
+    method: req.method,
+    path: req.path,
+    availableRoutes: [
+      'GET /',
+      'GET /health',
+      'GET /requests',
+      'POST /webhook/messages',
+    ],
   });
 });
 

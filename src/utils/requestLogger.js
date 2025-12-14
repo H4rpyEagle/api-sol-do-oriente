@@ -1,10 +1,104 @@
 /**
  * Sistema de log de requisições em memória
  * Armazena as últimas N requisições para visualização em tempo real
+ * Também salva logs no Supabase
  */
+
+import { createClient } from '@supabase/supabase-js';
+import { config } from '../config/env.js';
+import { logger } from './logger.js';
 
 const MAX_REQUESTS = 100; // Máximo de requisições armazenadas
 const requests = [];
+
+// Cliente Supabase para salvar logs
+const supabase = createClient(
+  config.supabase.url,
+  config.supabase.serviceRoleKey
+);
+
+/**
+ * Salva log no Supabase de forma assíncrona (não bloqueia)
+ */
+async function saveLogToSupabase(requestLog, responseData) {
+  try {
+    // Determina o tipo de log baseado no path
+    let tipo = 'API';
+    const path = requestLog.path || requestLog.url || '';
+    
+    if (path.includes('webhook/messages')) {
+      tipo = 'Mensagem';
+    } else if (path.includes('health')) {
+      tipo = 'Health';
+    } else if (path.includes('stats')) {
+      tipo = 'Stats';
+    } else if (path.includes('webhook')) {
+      tipo = 'Webhook';
+    }
+    
+    // Extrai mensagem do body se for webhook de mensagem
+    let mensagem = `${requestLog.method} ${path}`;
+    
+    if (tipo === 'Mensagem' && requestLog.body) {
+      try {
+        const bodyData = typeof requestLog.body === 'string' 
+          ? JSON.parse(requestLog.body) 
+          : requestLog.body;
+        
+        const event = bodyData?.event || bodyData?.data?.event;
+        const messageData = bodyData?.data?.message || bodyData?.data?.key;
+        const messageText = messageData?.conversation || 
+                           messageData?.extendedTextMessage?.text || 
+                           messageData?.imageMessage?.caption ||
+                           (messageData?.audioMessage ? '🎵 Áudio recebido' : null) ||
+                           (messageData?.stickerMessage ? '🎨 Sticker recebido' : null);
+        
+        if (messageText) {
+          mensagem = `[${event || 'Webhook'}] ${messageText}`;
+        } else if (event) {
+          mensagem = `[${event}] ${requestLog.method} ${path}`;
+        }
+      } catch (e) {
+        // Se não conseguir parsear, usa a mensagem padrão
+      }
+    }
+    
+    // Prepara dados para inserção
+    const logData = {
+      tipo: tipo,
+      mensagem: mensagem.substring(0, 5000), // Limita tamanho da mensagem
+      method: requestLog.method,
+      path: path,
+      body: requestLog.body ? (typeof requestLog.body === 'string' ? requestLog.body : JSON.stringify(requestLog.body)).substring(0, 10000) : null,
+      response: responseData ? JSON.stringify(responseData) : null,
+      query_params: requestLog.query && Object.keys(requestLog.query).length > 0 ? requestLog.query : null,
+      created_at: requestLog.timestamp
+    };
+    
+    // Remove campos null para não ocupar espaço
+    Object.keys(logData).forEach(key => {
+      if (logData[key] === null) {
+        delete logData[key];
+      }
+    });
+    
+    // Salva no Supabase de forma assíncrona (não bloqueia)
+    supabase
+      .from('logs')
+      .insert([logData])
+      .then(({ error }) => {
+        if (error) {
+          logger.warn('Erro ao salvar log no Supabase (não crítico):', error.message);
+        }
+      })
+      .catch(err => {
+        logger.warn('Erro ao salvar log no Supabase (não crítico):', err.message);
+      });
+  } catch (error) {
+    // Não bloqueia o fluxo se houver erro ao salvar log
+    logger.warn('Erro ao preparar log para Supabase (não crítico):', error.message);
+  }
+}
 
 /**
  * Adiciona uma requisição ao log
@@ -33,6 +127,11 @@ export function logRequest(req, responseData = null) {
   if (requests.length > MAX_REQUESTS) {
     requests.pop();
   }
+
+  // Salva no Supabase de forma assíncrona (não bloqueia)
+  saveLogToSupabase(requestLog, responseData).catch(() => {
+    // Erro já foi logado em saveLogToSupabase
+  });
 
   return requestLog;
 }
