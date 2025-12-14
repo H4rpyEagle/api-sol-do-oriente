@@ -4,6 +4,7 @@ import { logger } from './utils/logger.js';
 import webhookRoutes from './routes/webhooks.js';
 import healthRoutes from './routes/health.js';
 import requestsRoutes from './routes/requests.js';
+import dashboardRoutes from './routes/dashboard.js';
 import { logRequest } from './utils/requestLogger.js';
 
 const app = express();
@@ -65,6 +66,7 @@ app.use((req, res, next) => {
 app.use('/webhook', webhookRoutes);
 app.use('/health', healthRoutes);
 app.use('/requests', requestsRoutes);
+app.use('/dashboard', dashboardRoutes);
 
 // Rota POST na raiz para receber webhooks da Evolution API
 // A Evolution API está configurada para enviar para https://mensagem.soldooriente.online/
@@ -140,6 +142,7 @@ app.get('/', (req, res) => {
       health: '/health',
       requests: '/requests',
       requestsStats: '/requests/stats',
+      dashboard: '/dashboard',
     },
   };
   res.json(response);
