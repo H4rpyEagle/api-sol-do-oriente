@@ -51,8 +51,10 @@ async function handleWebhook(req, res) {
 
     res.status(200).json(response);
 
-    // Registra a requisição após responder
-    logRequest(req, response);
+    // Registra a requisição após responder (assíncrono)
+    logRequest(req, response).catch(err => {
+      logger.error('Erro ao logar requisição:', err);
+    });
 
     // Processa a mensagem de forma assíncrona
     processMessage({ body: req.body })
@@ -63,6 +65,12 @@ async function handleWebhook(req, res) {
         logger.error('Erro ao processar mensagem:', error);
         logger.error('Stack trace:', error.stack);
         logger.error('Body recebido:', JSON.stringify(req.body, null, 2));
+        // Tenta salvar o erro também
+        logRequest(req, { 
+          error: error.message, 
+          stack: error.stack,
+          status: 500 
+        }).catch(() => {});
       });
   } catch (error) {
     logger.error('Erro no webhook:', error);

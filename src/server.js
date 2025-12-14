@@ -34,18 +34,26 @@ app.use((req, res, next) => {
     const originalSend = res.send;
     
     res.json = function(data) {
-      logRequest(req, {
+      const responseData = {
         status: res.statusCode,
         body: typeof data === 'string' ? data : JSON.stringify(data),
+      };
+      // Chama logRequest de forma assíncrona
+      logRequest(req, responseData).catch(err => {
+        console.error('Erro ao logar requisição:', err);
       });
       return originalJson.call(this, data);
     };
     
     res.send = function(data) {
       if (res.headersSent) return originalSend.call(this, data);
-      logRequest(req, {
+      const responseData = {
         status: res.statusCode,
         body: typeof data === 'string' ? data : JSON.stringify(data),
+      };
+      // Chama logRequest de forma assíncrona
+      logRequest(req, responseData).catch(err => {
+        console.error('Erro ao logar requisição:', err);
       });
       return originalSend.call(this, data);
     };
@@ -88,8 +96,10 @@ app.post('/', async (req, res) => {
 
     res.status(200).json(response);
 
-    // Registra a requisição após responder
-    logRequest(req, response);
+    // Registra a requisição após responder (assíncrono)
+    logRequest(req, response).catch(err => {
+      logger.error('Erro ao logar requisição:', err);
+    });
 
     // Processa a mensagem de forma assíncrona
     processMessage({ body: req.body })
@@ -100,6 +110,12 @@ app.post('/', async (req, res) => {
         logger.error('Erro ao processar mensagem:', error);
         logger.error('Stack trace:', error.stack);
         logger.error('Body recebido:', JSON.stringify(req.body, null, 2));
+        // Tenta salvar o erro também
+        logRequest(req, { 
+          error: error.message, 
+          stack: error.stack,
+          status: 500 
+        }).catch(() => {});
       });
   } catch (error) {
     logger.error('Erro no webhook raiz:', error);
